@@ -1,30 +1,34 @@
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Properties;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class Server {
-    private static final List<Socket> sockets = new ArrayList<>();
+    public static final Map<String, Socket> sockets = new ConcurrentHashMap<>();
 
     public static void main(String[] args) {
         Properties props = getProperties("conf.properties");
-        String port = props.getProperty("server.port");
+        int port = Integer.parseInt(props.getProperty("server.port"));
 
-        try (ServerSocket serverSocket = new ServerSocket(Integer.parseInt(port))) {
+        try (ServerSocket serverSocket = new ServerSocket(port)) {
             Thread acceptThread = new Thread(() -> {
+                ExecutorService executor = Executors.newCachedThreadPool();
+
                 while (true) {
-                    try (Socket socket = serverSocket.accept()) {
-                        sockets.add(socket);
+                    try {
+                        Socket acceptedSocket = serverSocket.accept();
+                        executor.submit(new ClientHandler(acceptedSocket));
                     } catch (IOException e) {
                         if (serverSocket.isClosed()) {
                             break;
                         }
                     }
                 }
+                executor.shutdown();
+
             });
             acceptThread.start();
             acceptThread.join();
