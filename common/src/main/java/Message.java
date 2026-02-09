@@ -10,4 +10,20 @@ public class Message {
         this.createdAt = LocalDateTime.now();
         this.text = text;
     }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public String getText() {
+        return text;
+    }
+
+    public void setText(String text) {
+        this.text = text;
+    }
 }
