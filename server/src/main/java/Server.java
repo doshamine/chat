@@ -1,88 +1,93 @@
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
 
 public class Server {
-    public static final BlockingQueue<Message> queue = new LinkedBlockingQueue<>();
+    public static final Map<String, BlockingQueue<Message>> map = new ConcurrentHashMap<>();
+    public static Set<Socket> sockets = ConcurrentHashMap.newKeySet();
+    public static ExecutorService executor = Executors.newCachedThreadPool();
 
-    public static void main(String[] args) throws IOException, InterruptedException {
+    public static void main(String[] args) {
         Properties props = getProperties("conf.properties");
         int port = Integer.parseInt(props.getProperty("server.port"));
-        ServerSocket serverSocket = new ServerSocket(port);
+        String timeFormat = props.getProperty("time.format");
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern(timeFormat);
 
-        Thread acceptThread = new Thread(() -> {
+        try (ServerSocket serverSocket = new ServerSocket(port)) {
             while (!serverSocket.isClosed()) {
-                try {
-                    Socket socket = serverSocket.accept();
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                    PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
+                Socket socket = serverSocket.accept();
+                sockets.add(socket);
 
-                    writer.println("Привет! Введи никнейм: ");
-                    writer.flush();
-                    String name = reader.readLine();
-                    writer.println("Добро пожаловать, " + name + "!");
-                    writer.flush();
+                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
 
-                    Thread sendThread = new Thread(() -> {
-                        Socket s = socket;
-                        PrintWriter out = writer;
+                out.println("Привет! Введи никнейм: ");
+                out.flush();
+                String username = in.readLine();
+                map.put(username, new LinkedBlockingQueue<>());
+                out.println("Добро пожаловать, " + username + "!");
+                out.flush();
 
-                        while (!s.isClosed()) {
-                            if (!Server.queue.isEmpty()) {
-                                Message msg = null;
-                                try {
-                                    msg = Server.queue.take();
-                                } catch (InterruptedException e) {
-                                    throw new RuntimeException(e);
-                                }
-
-                                out.println(String.format(
-                                    "%s (%s): %s", msg.getUsername(),
-                                    msg.getCreatedAt(), msg.getText()
-                                ));
-                                out.flush();
+                executor.execute(() -> {
+                    try {
+                        while (!socket.isClosed()) {
+                            if (!map.get(username).isEmpty()) {
+                                    Message msg = map.get(username).take();
+                                    out.println(String.format(
+                                        "%s (%s): %s", msg.getUsername(),
+                                        msg.getCreatedAt().format(formatter),
+                                        msg.getText()
+                                    ));
+                                    out.flush();
                             }
                         }
-                    });
-                    sendThread.start();
+                    } catch (InterruptedException e) {
+                        System.err.println(e.getMessage());
+                    } finally {
+                        out.close();
+                    }
+                });
 
-                    Thread receiveThread = new Thread(() -> {
-                        Socket s = socket;
-                        BufferedReader in = reader;
-
+                executor.execute(() -> {
+                    try {
                         while (true) {
-                            String text = null;
-                            try {
-                                text = in.readLine();
-                            } catch (IOException e) {
-                                throw new RuntimeException(e);
-                            }
+                            String text = in.readLine();
                             if (text == null) {
-                                try {
-                                    s.close();
-                                } catch (IOException e) {
-                                    throw new RuntimeException(e);
-                                }
+                                socket.close();
                                 break;
                             }
-                            Message message = new Message(name, text);
-                            try {
-                                Server.queue.put(message);
-                            } catch (InterruptedException e) {
-                                throw new RuntimeException(e);
+                            Message message = new Message(username, text);
+                            for (Map.Entry<String, BlockingQueue<Message>> entry : map.entrySet()) {
+                                entry.getValue().put(message);
                             }
                         }
-                    });
-                    receiveThread.start();
+                    } catch (Exception e) {
+                        System.err.println(e.getMessage());
+                    } finally {
+                        try {
+                            in.close();
+                        } catch (IOException e) {
+                            System.err.println(e.getMessage());
+                        }
+                    }
+                });
+            }
+        } catch (IOException e) {
+            System.err.println(e.getMessage());
+        } finally {
+            executor.shutdown();
+
+            for (Socket socket : sockets) {
+                try {
+                    socket.close();
                 } catch (IOException e) {
-                    throw new RuntimeException(e);
+                    System.err.println(e.getMessage());
                 }
             }
-        });
-        acceptThread.start();
-        acceptThread.join();
+        }
     }
 
     private static Properties getProperties(String propertiesFilename) {
@@ -93,7 +98,7 @@ public class Server {
                 props.load(is);
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            System.err.println(e.getMessage());
         }
         return props;
     }

@@ -1,36 +1,46 @@
 import java.io.*;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.Properties;
 import java.util.Scanner;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class Client {
+    public static BlockingQueue<String> queue = new LinkedBlockingQueue<>();
+
     public static void main(String[] args) {
         Properties props = Client.getProperties("conf.properties");
         String host  = props.getProperty("server.host");
         String port = props.getProperty("server.port");
         String exitCommand = props.getProperty("client.exit");
+        int socketTimeout = Integer.parseInt(props.getProperty("socket.timeout"));
         Scanner sc = new Scanner(System.in);
 
         try (
             Socket socket = new Socket(host, Integer.parseInt(port));
-            PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
-            BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
         ) {
-            System.out.print(reader.readLine());
-            writer.println(sc.nextLine());
-            writer.flush();
-            System.out.println(reader.readLine());
+            socket.setSoTimeout(socketTimeout);
+            System.out.print(in.readLine());
+            out.println(sc.nextLine());
+            out.flush();
+            System.out.println(in.readLine());
+
             Thread receiveThread = new Thread(() -> {
-                BufferedReader in = reader;
-                while (true) {
-                    String msg = null;
+                while (!Thread.currentThread().isInterrupted()) {
                     try {
-                        msg = in.readLine();
+                        String msg = in.readLine();
+                        queue.put(msg);
                     } catch (IOException e) {
-                        throw new RuntimeException(e);
+                        if (!(e instanceof SocketTimeoutException)) {
+                            System.err.println(e.getMessage());
+                        }
+                    } catch (InterruptedException e) {
+                        System.err.println(e.getMessage());
                     }
-                    System.out.println(msg);
                 }
             });
             receiveThread.start();
@@ -39,16 +49,19 @@ public class Client {
                 System.out.print("> ");
                 String text = sc.nextLine();
                 if (text.equals(exitCommand)) {
+                    receiveThread.interrupt();
                     break;
                 }
 
-                writer.println(text);
-                writer.flush();
+                out.println(text);
+                out.flush();
+
+                while (!queue.isEmpty()) {
+                    System.out.println(queue.take());
+                }
             }
-        } catch (UnknownHostException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
         }
     }
 
