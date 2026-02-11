@@ -1,14 +1,19 @@
 import java.io.*;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
-import java.net.UnknownHostException;
 import java.util.Properties;
 import java.util.Scanner;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.logging.FileHandler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
 
 public class Client {
     public static BlockingQueue<String> queue = new LinkedBlockingQueue<>();
+    private static Logger logger = Logger.getLogger(Client.class.getName());
+    private static FileHandler fileHandler;
 
     public static void main(String[] args) {
         Properties props = Client.getProperties("conf.properties");
@@ -17,31 +22,53 @@ public class Client {
         String exitCommand = props.getProperty("client.exit");
         int socketTimeout = Integer.parseInt(props.getProperty("socket.timeout"));
         Scanner sc = new Scanner(System.in);
+        String logFilename = props.getProperty("log.filename");
+
+        Level infoLevel = Level.parse(props.getProperty("log.level.info"));
+        Level warningLevel = Level.parse(props.getProperty("log.level.warning"));
+        Level severeLevel = Level.parse(props.getProperty("log.level.severe"));
+
+        try {
+            fileHandler = new FileHandler(logFilename, true);
+        } catch (IOException e) {
+            logger.log(severeLevel, "Ошибка при открытии файла: " + e.getMessage());
+        }
+        fileHandler.setFormatter(new SimpleFormatter());
+        logger.addHandler(fileHandler);
 
         try (
             Socket socket = new Socket(host, Integer.parseInt(port));
             PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
         ) {
+            logger.log(infoLevel, "Подключение к серверу " + host + ":" + port);
             socket.setSoTimeout(socketTimeout);
             System.out.print(in.readLine());
-            out.println(sc.nextLine());
+            String username = sc.nextLine();
+            out.println(username);
             out.flush();
             System.out.println(in.readLine());
+            logger.log(infoLevel, "Вход в чат под именем " + username);
 
             Thread receiveThread = new Thread(() -> {
+                logger.log(infoLevel, "Готов к приему сообщений");
                 while (!Thread.currentThread().isInterrupted()) {
                     try {
                         String msg = in.readLine();
-                        queue.put(msg);
+
+                        if (msg != null) {
+                            logger.log(infoLevel, "Получено сообщение");
+                            queue.put(msg);
+                        }
                     } catch (IOException e) {
                         if (!(e instanceof SocketTimeoutException)) {
-                            System.err.println(e.getMessage());
+                            logger.log(warningLevel, "Ошибка при получении сообщения");
                         }
                     } catch (InterruptedException e) {
-                        System.err.println(e.getMessage());
+                        logger.log(warningLevel, "Получение сообщения прервано");
                     }
                 }
+                logger.log(infoLevel, "Прием сообщений завершен");
             });
             receiveThread.start();
 
@@ -49,19 +76,21 @@ public class Client {
                 System.out.print("> ");
                 String text = sc.nextLine();
                 if (text.equals(exitCommand)) {
+                    logger.log(infoLevel, "Выход из чата");
                     receiveThread.interrupt();
                     break;
                 }
 
                 out.println(text);
                 out.flush();
+                logger.log(infoLevel, "Отправлено сообщение");
 
                 while (!queue.isEmpty()) {
                     System.out.println(queue.take());
                 }
             }
         } catch (Exception e) {
-            System.err.println(e.getMessage());
+            logger.log(severeLevel, "Ошибка соединения с сервером");
         }
     }
 
