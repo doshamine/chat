@@ -1,12 +1,12 @@
 import java.io.*;
 import java.net.Socket;
+import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.Properties;
 import java.util.Scanner;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.FileHandler;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.logging.SimpleFormatter;
 
@@ -19,78 +19,49 @@ public class Client {
         Properties props = Client.getProperties("conf.properties");
         String host  = props.getProperty("server.host");
         String port = props.getProperty("server.port");
-        String exitCommand = props.getProperty("client.exit");
-        int socketTimeout = Integer.parseInt(props.getProperty("socket.timeout"));
         Scanner sc = new Scanner(System.in);
-        String logFilename = props.getProperty("log.filename");
-
-        Level infoLevel = Level.parse(props.getProperty("log.level.info"));
-        Level warningLevel = Level.parse(props.getProperty("log.level.warning"));
-        Level severeLevel = Level.parse(props.getProperty("log.level.severe"));
-
-        try {
-            fileHandler = new FileHandler(logFilename, true);
-        } catch (IOException e) {
-            logger.log(severeLevel, "Ошибка при открытии файла: " + e.getMessage());
-        }
-        fileHandler.setFormatter(new SimpleFormatter());
-        logger.addHandler(fileHandler);
+        configureLogger();
 
         try (
             Socket socket = new Socket(host, Integer.parseInt(port));
             PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
         ) {
-            logger.log(infoLevel, "Подключение к серверу " + host + ":" + port);
-            socket.setSoTimeout(socketTimeout);
-            System.out.print(in.readLine());
-            String username = sc.nextLine();
-            out.println(username);
-            out.flush();
-            System.out.println(in.readLine());
-            logger.log(infoLevel, "Вход в чат под именем " + username);
-
-            Thread receiveThread = new Thread(() -> {
-                logger.log(infoLevel, "Готов к приему сообщений");
-                while (!Thread.currentThread().isInterrupted()) {
-                    try {
-                        String msg = in.readLine();
-
-                        if (msg != null) {
-                            logger.log(infoLevel, "Получено сообщение");
-                            queue.put(msg);
-                        }
-                    } catch (IOException e) {
-                        if (!(e instanceof SocketTimeoutException)) {
-                            logger.log(warningLevel, "Ошибка при получении сообщения");
-                        }
-                    } catch (InterruptedException e) {
-                        logger.log(warningLevel, "Получение сообщения прервано");
-                    }
-                }
-                logger.log(infoLevel, "Прием сообщений завершен");
-            });
-            receiveThread.start();
+            logger.info("Подключение к серверу " + host + ":" + port);
 
             while (true) {
-                System.out.print("> ");
-                String text = sc.nextLine();
-                if (text.equals(exitCommand)) {
-                    logger.log(infoLevel, "Выход из чата");
-                    receiveThread.interrupt();
+                String prompt = in.readLine();
+
+                if (prompt == null) {
+                    throw new Exception("Соединение с сервером прервано");
+                }
+
+                System.out.print(prompt);
+
+                if (prompt.equals("Добро пожаловать!")) {
+                    System.out.println();
                     break;
                 }
 
-                out.println(text);
+                String username = sc.nextLine();
+                out.println(username);
                 out.flush();
-                logger.log(infoLevel, "Отправлено сообщение");
-
-                while (!queue.isEmpty()) {
-                    System.out.println(queue.take());
-                }
+                logger.info("Попытка входа с именем " + username);
             }
+
+            logger.info("Вход в чат");
+            Thread receiverThread = new Thread(new Receiver(socket));
+            Thread senderThread = new Thread(new Sender(socket));
+
+            receiverThread.start();
+            senderThread.start();
+
+            senderThread.join();
+            receiverThread.interrupt();
+            logger.info("Выход из чата");
+
         } catch (Exception e) {
-            logger.log(severeLevel, "Ошибка соединения с сервером");
+            logger.severe("Ошибка соединения с сервером");
         }
     }
 
@@ -105,5 +76,103 @@ public class Client {
             e.printStackTrace();
         }
         return props;
+    }
+
+    private static class Receiver implements Runnable {
+        final Socket socket;
+
+        public Receiver(Socket socket) {
+            this.socket = socket;
+        }
+
+        @Override
+        public void run() {
+            Properties props = Client.getProperties("conf.properties");
+            int socketTimeout = Integer.parseInt(props.getProperty("socket.timeout"));
+            try {
+                socket.setSoTimeout(socketTimeout);
+            } catch (SocketException e) {
+                logger.warning("Не удалось настроить таймаут сокета");
+            }
+
+            try (BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+                logger.info("Готов к приему сообщений");
+                while (!Thread.currentThread().isInterrupted()) {
+                    try {
+                        String msg = in.readLine();
+
+                        if (msg == null) {
+                            logger.severe("Соединение с сервером прервано");
+                            break;
+                        }
+
+                        logger.info("Получено сообщение");
+                        queue.put(msg);
+                    } catch (IOException e) {
+                        if (!(e instanceof SocketTimeoutException)) {
+                            logger.warning("Ошибка при получении сообщения");
+                        }
+                    } catch (InterruptedException e) {
+                        logger.severe("Получение сообщения прервано");
+                    }
+                }
+                logger.info("Прием сообщений завершен");
+            } catch (IOException e) {
+                logger.severe("Ошибка потока ввода");
+            }
+        }
+    }
+
+    private static class Sender implements Runnable {
+        final Socket socket;
+
+        public Sender(Socket socket) {
+            this.socket = socket;
+        }
+
+        @Override
+        public void run() {
+            Properties props = Client.getProperties("conf.properties");
+            String exitCommand = props.getProperty("client.exit");
+            Scanner sc = new Scanner(System.in);
+
+            try (PrintWriter out = new PrintWriter(socket.getOutputStream(), true)) {
+                while (true) {
+                    logger.info("Готов к отправке сообщений");
+                    System.out.print("> ");
+                    String text = sc.nextLine();
+                    if (text.equals(exitCommand)) {
+                        break;
+                    }
+
+                    out.println(text);
+                    out.flush();
+                    logger.info("Отправлено сообщение");
+
+                    while (!queue.isEmpty()) {
+                        System.out.println(queue.take());
+                    }
+                }
+            } catch (IOException e) {
+                logger.severe("Ошибка потока вывода");
+            } catch (InterruptedException e) {
+                logger.warning("Работа с очередью сообщений прервана");
+            }
+        }
+    }
+
+    private static void configureLogger() {
+        Properties props = getProperties("conf.properties");
+        String logFilename = props.getProperty("log.filename");
+
+        try {
+            fileHandler = new FileHandler(logFilename, true);
+        } catch (IOException e) {
+            System.err.println("Ошибка при открытии файла: " + e.getMessage());
+        }
+
+        fileHandler.setFormatter(new SimpleFormatter());
+        logger.addHandler(fileHandler);
+        logger.setUseParentHandlers(false);
     }
 }
