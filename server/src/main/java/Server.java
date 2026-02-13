@@ -9,24 +9,27 @@ import java.util.logging.FileHandler;
 import java.util.logging.SimpleFormatter;
 
 public class Server {
-    private static Map<String, BlockingQueue<Message>> map = new ConcurrentHashMap<>();
-    private static Map<String, Socket> users = new ConcurrentHashMap<>();
-    private static Logger logger = Logger.getLogger(Server.class.getName());
-    private static FileHandler fileHandler;
+    private static final Logger logger = Logger.getLogger(Server.class.getName());
+    private static final String propertiesFilename = "conf.properties";
+
+    private final Map<String, BlockingQueue<Message>> queuesMap = new ConcurrentHashMap<>();
+    private final ExecutorService executor = Executors.newCachedThreadPool();
 
     public static void main(String[] args) {
-        ExecutorService executor = Executors.newCachedThreadPool();
-        Properties props = getProperties("conf.properties");
         configureLogger();
+        int port = Integer.parseInt(getProperty("server.port"));
+        Server server = new Server();
+        server.start(port);
+    }
 
-        int port = Integer.parseInt(props.getProperty("server.port"));
+    public void start(int port) {
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             logger.info("Сервер запущен");
 
             while (!serverSocket.isClosed()) {
                 Socket socket = serverSocket.accept();
                 logger.info("Новое подключение");
-                executor.execute(new ClientHandler(socket));
+                executor.execute(new ClientHandler(socket, queuesMap));
             }
         } catch (IOException e) {
             logger.severe("Не удалось запустить сервер: " + e.getMessage());
@@ -36,38 +39,38 @@ public class Server {
         }
     }
 
-    private static Properties getProperties(String propertiesFilename) {
+    public static String getProperty(String property) {
         Properties props = new Properties();
         try (InputStream is = Server.class.getClassLoader()
-                .getResourceAsStream(propertiesFilename)) {
+            .getResourceAsStream(propertiesFilename)) {
             if (is != null) {
                 props.load(is);
             }
         } catch (IOException e) {
             System.err.println(e.getMessage());
         }
-        return props;
+        return props.getProperty(property);
     }
 
     private static void configureLogger() {
-        Properties props = getProperties("conf.properties");
-        String logFilename = props.getProperty("log.filename");
+        String logFilename = getProperty("log.filename");
 
         try {
-            fileHandler = new FileHandler(logFilename, true);
+            FileHandler fileHandler = new FileHandler(logFilename, true);
+            fileHandler.setFormatter(new SimpleFormatter());
+            logger.addHandler(fileHandler);
         } catch (IOException e) {
             System.err.println("Ошибка при открытии файла: " + e.getMessage());
         }
-
-        fileHandler.setFormatter(new SimpleFormatter());
-        logger.addHandler(fileHandler);
     }
 
     private static class ClientHandler implements Runnable {
         final Socket socket;
+        final Map<String, BlockingQueue<Message>> queuesMap;
 
-        public ClientHandler(Socket socket) {
+        public ClientHandler(Socket socket, Map<String, BlockingQueue<Message>> queuesMap) {
             this.socket = socket;
+            this.queuesMap = queuesMap;
         }
 
         @Override
@@ -79,19 +82,20 @@ public class Server {
                 out.println("Привет! Введи никнейм: ");
                 out.flush();
                 String username = in.readLine();
-                while (map.containsKey(username)) {
+
+                while (queuesMap.containsKey(username)) {
                     out.println("Никнейм уже занят! Введи другой: ");
                     out.flush();
                     username = in.readLine();
                 }
-                map.put(username, new LinkedBlockingQueue<>());
-                users.put(username, socket);
+
+                queuesMap.put(username, new LinkedBlockingQueue<>());
                 out.println("Добро пожаловать!");
                 out.flush();
                 logger.info(username + ": вход в чат");
 
-                Thread writerThread = new Thread(new ServerWriter(socket, username));
-                Thread readerThread = new Thread(new ServerReader(socket, username));
+                Thread writerThread = new Thread(new ServerWriter(socket, username, queuesMap.get(username)));
+                Thread readerThread = new Thread(new ServerReader(socket, username, queuesMap));
 
                 writerThread.start();
                 readerThread.start();
@@ -100,8 +104,8 @@ public class Server {
                 readerThread.join();
                 logger.info(username + ": выход из чата");
 
-                users.get(username).close();
-                map.remove(username);
+                socket.close();
+                queuesMap.remove(username);
             } catch (IOException e) {
                 logger.severe("Ошибка работы потоков ввода/вывода: " + e.getMessage());
             } catch (InterruptedException e) {
@@ -113,16 +117,18 @@ public class Server {
     private static class ServerReader implements Runnable {
         final Socket socket;
         final String username;
+        final Map<String, BlockingQueue<Message>> queuesMap;
 
-        public ServerReader(Socket socket, String username) {
+        public ServerReader(Socket socket, String username, Map<String, BlockingQueue<Message>> queuesMap) {
             this.socket = socket;
             this.username = username;
+            this.queuesMap = queuesMap;
         }
 
         @Override
         public void run() {
             try (
-                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))
             ) {
                 while (true) {
                     String text;
@@ -133,7 +139,7 @@ public class Server {
                     }
 
                     Message message = new Message(username, text);
-                    for (Map.Entry<String, BlockingQueue<Message>> entry : map.entrySet()) {
+                    for (Map.Entry<String, BlockingQueue<Message>> entry : queuesMap.entrySet()) {
                         entry.getValue().put(message);
                     }
                     logger.info(username + ": отправка сообщения");
@@ -149,25 +155,25 @@ public class Server {
     private static class ServerWriter implements Runnable {
         final Socket socket;
         final String username;
+        final BlockingQueue<Message> messageQueue;
 
-        public ServerWriter(Socket socket, String username) {
+        public ServerWriter(Socket socket, String username, BlockingQueue<Message> messageQueue) {
             this.socket = socket;
             this.username = username;
+            this.messageQueue = messageQueue;
         }
 
         @Override
         public void run() {
-            Properties props = getProperties("conf.properties");
-            String timeFormat = props.getProperty("time.format");
+            String timeFormat = getProperty("time.format");
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern(timeFormat);
 
             try (
                 PrintWriter out = new PrintWriter(socket.getOutputStream(), true)
             ) {
-
                 while (!socket.isClosed()) {
-                    if (!map.get(username).isEmpty()) {
-                        Message msg = map.get(username).take();
+                    if (!messageQueue.isEmpty()) {
+                        Message msg = messageQueue.take();
 
                         out.println(String.format(
                             "%s (%s): %s", msg.getUsername(),

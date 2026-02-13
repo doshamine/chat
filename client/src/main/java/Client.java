@@ -69,22 +69,11 @@ public class Client {
 
         } catch (IOException e) {
             logger.severe("Соединение с сервером прервано: " + e.getMessage());
+            System.err.println("Соединение с сервером прервано");
         } catch (InterruptedException e) {
-            logger.warning("Прервана работа потока: " + e.getMessage());
+            logger.warning("Работа программы прервана: " + e.getMessage());
+            System.err.println("Работа программы прервана");
         }
-    }
-
-    public static String getProperty(String property) {
-        Properties props = new Properties();
-        try (InputStream is = Client.class.getClassLoader()
-                .getResourceAsStream(propertiesFilename)) {
-            if (is != null) {
-                props.load(is);
-            }
-        } catch (IOException e) {
-            System.err.println(e.getMessage());
-        }
-        return props.getProperty(property);
     }
 
     private static class Receiver implements Runnable {
@@ -114,6 +103,7 @@ public class Client {
 
                         if (msg == null) {
                             logger.severe("Соединение с сервером прервано");
+                            System.err.println("Соединение с сервером прервано");
                             break;
                         }
 
@@ -129,7 +119,8 @@ public class Client {
                 }
                 logger.info("Прием сообщений завершен");
             } catch (IOException e) {
-                logger.severe("Ошибка потока ввода");
+                logger.severe("Ошибка потока ввода: " + e.getMessage());
+                System.err.println("Ошибка потока ввода");
             }
         }
     }
@@ -166,11 +157,26 @@ public class Client {
                     }
                 }
             } catch (IOException e) {
-                logger.severe("Ошибка потока вывода");
+                logger.severe("Ошибка потока вывода: " +  e.getMessage());
+                System.err.println("Ошибка потока ввода");
             } catch (InterruptedException e) {
-                logger.warning("Работа с очередью сообщений прервана");
+                logger.warning("Работа с очередью сообщений прервана: " + e.getMessage());
+                System.err.println("Работа с очередью сообщений прервана");
             }
         }
+    }
+
+    public static String getProperty(String property) {
+        Properties props = new Properties();
+        try (InputStream is = Client.class.getClassLoader()
+            .getResourceAsStream(propertiesFilename)) {
+            if (is != null) {
+                props.load(is);
+            }
+        } catch (IOException e) {
+            System.err.println(e.getMessage());
+        }
+        return props.getProperty(property);
     }
 
     private static void configureLogger() {
