@@ -26,7 +26,7 @@ public class ReaderHandler extends Handler {
         try {
             socket.setSoTimeout(socketTimeout);
         } catch (SocketException e) {
-            logger.warning("Не удалось настроить таймаут сокета");
+            logger.warning("Не удалось настроить таймаут сокета: " + e.getMessage());
         }
 
         try (BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
@@ -36,7 +36,7 @@ public class ReaderHandler extends Handler {
                     String msg = in.readLine();
 
                     if (msg == null) {
-                        logger.severe("Соединение с сервером прервано");
+                        logger.info("Соединение с сервером прервано");
                         System.err.println("Соединение с сервером прервано");
                         break;
                     }
@@ -45,7 +45,7 @@ public class ReaderHandler extends Handler {
                     messageQueue.put(msg);
                 } catch (IOException e) {
                     if (!(e instanceof SocketTimeoutException)) {
-                        logger.warning("Ошибка при получении сообщения");
+                        logger.severe("Ошибка при получении сообщения");
                     }
                 } catch (InterruptedException e) {
                     logger.severe("Получение сообщения прервано");
