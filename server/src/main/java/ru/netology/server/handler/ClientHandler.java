@@ -1,7 +1,8 @@
 package ru.netology.server.handler;
 
+import ru.netology.common.abs.Connector;
+import ru.netology.common.abs.LoggableRunner;
 import ru.netology.common.message.Message;
-import ru.netology.common.handler.Handler;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -12,7 +13,7 @@ import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
-public class ClientHandler extends Handler {
+public class ClientHandler extends Connector implements LoggableRunner {
     final Map<String, BlockingQueue<Message>> queuesMap;
 
     public ClientHandler(Socket socket, Map<String, BlockingQueue<Message>> queuesMap) {
@@ -41,7 +42,7 @@ public class ClientHandler extends Handler {
             out.flush();
             logger.info(username + ": вход в чат");
 
-            Thread writerThread = new Thread(new WriterHandler(socket, username, queuesMap.get(username)));
+            Thread writerThread = new Thread(new WriterHandler(socket, queuesMap.get(username)));
             Thread readerThread = new Thread(new ReaderHandler(socket, username, queuesMap));
 
             writerThread.start();

@@ -1,7 +1,8 @@
 package ru.netology.server.handler;
 
+import ru.netology.common.abs.Connector;
+import ru.netology.common.abs.LoggableRunner;
 import ru.netology.common.message.Message;
-import ru.netology.common.handler.Handler;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -10,7 +11,7 @@ import java.net.Socket;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 
-public class ReaderHandler extends Handler {
+public class ReaderHandler extends Connector implements LoggableRunner {
     final String username;
     final Map<String, BlockingQueue<Message>> queuesMap;
 

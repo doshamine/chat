@@ -1,12 +1,11 @@
-import org.junit.jupiter.api.BeforeAll;
-import ru.netology.client.Client;
+package ru.netology.client;
 
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.util.Properties;
 
 public abstract class BaseTest {
     private static final String propertiesFilename = "conf.properties";
+
 
     protected static String getProperty(String property) {
         Properties props = new Properties();

@@ -1,8 +1,9 @@
 package ru.netology.server.handler;
 
+import ru.netology.common.abs.Connector;
+import ru.netology.common.abs.LoggableRunner;
 import ru.netology.common.message.Message;
 import ru.netology.server.Server;
-import ru.netology.common.handler.Handler;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -10,13 +11,11 @@ import java.net.Socket;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.BlockingQueue;
 
-public class WriterHandler extends Handler {
-    final String username;
+public class WriterHandler extends Connector implements LoggableRunner {
     final BlockingQueue<Message> messageQueue;
 
-    public WriterHandler(Socket socket, String username, BlockingQueue<Message> messageQueue) {
+    public WriterHandler(Socket socket, BlockingQueue<Message> messageQueue) {
         super(socket);
-        this.username = username;
         this.messageQueue = messageQueue;
     }
 
@@ -38,14 +37,14 @@ public class WriterHandler extends Handler {
                         msg.getText()
                     ));
                     out.flush();
-                    logger.info(username + ": прием сообщения");
+                    logger.info("Прием сообщения");
                 }
             }
 
         } catch (IOException e) {
-            logger.severe(username + ": ошибка открытия потока вывода");
+            logger.severe("Ошибка открытия потока вывода");
         } catch (InterruptedException e) {
-            logger.severe(username + ": прервана работа с очередью сообщений");
+            logger.severe("Прервана работа с очередью сообщений");
         }
     }
 }
