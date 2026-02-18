@@ -1,7 +1,7 @@
 package ru.netology.client.handler;
 
 import ru.netology.client.Client;
-import ru.netology.common.abs.Connector;
+import ru.netology.common.abs.SocketHandler;
 import ru.netology.common.abs.LoggableRunner;
 
 import java.io.BufferedReader;
@@ -11,8 +11,8 @@ import java.io.PrintWriter;
 import java.net.Socket;
 import java.util.Scanner;
 
-public class RegistrationHandler extends Connector implements LoggableRunner {
-    public RegistrationHandler(Socket socket) {
+public class RegisterHandler extends SocketHandler implements LoggableRunner {
+    public RegisterHandler(Socket socket) {
         super(socket);
     }
 
@@ -46,16 +46,17 @@ public class RegistrationHandler extends Connector implements LoggableRunner {
             }
 
             logger.info("Вход в чат");
-            synchronized (ServerHandler.monitor) {
-                ServerHandler.monitor.notify();
-                ServerHandler.monitor.wait();
+            synchronized (socket) {
+                socket.notify();
+                socket.wait();
             }
             logger.info("Выход из чата");
         } catch (IOException e) {
-            logger.severe("Ошибка ввода/вывода: " + e.getMessage());
-            System.err.println("Ошибка ввода/вывода");
+            String errMessage = "Ошибка потока ввода/вывода: " + e.getMessage();
+            logger.severe(errMessage);
+            System.err.println(errMessage);
         } catch (InterruptedException e) {
-            String errMessage = "Работа завершена некорректно " +  e.getMessage();
+            String errMessage = "Работа некорректно прервана " +  e.getMessage();
             logger.severe(errMessage);
             System.err.println(errMessage);
         }

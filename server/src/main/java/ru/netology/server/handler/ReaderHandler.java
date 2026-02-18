@@ -1,6 +1,6 @@
 package ru.netology.server.handler;
 
-import ru.netology.common.abs.Connector;
+import ru.netology.common.abs.SocketHandler;
 import ru.netology.common.abs.LoggableRunner;
 import ru.netology.common.message.Message;
 
@@ -11,7 +11,7 @@ import java.net.Socket;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 
-public class ReaderHandler extends Connector implements LoggableRunner {
+public class ReaderHandler extends SocketHandler implements LoggableRunner {
     final String username;
     final Map<String, BlockingQueue<Message>> queuesMap;
 
@@ -41,9 +41,13 @@ public class ReaderHandler extends Connector implements LoggableRunner {
                 logger.info(username + ": отправка сообщения");
             }
         } catch (IOException e) {
-            logger.severe(username + ": ошибка открытия потока ввода");
+            String errMessage = username + ": ошибка открытия потока ввода";
+            logger.severe(errMessage);
+            System.err.println(errMessage);
         } catch (InterruptedException e) {
-            logger.severe(username + ": прервана работа с очередью сообщений");
+            String errMessage = username + ": прервана работа с очередью сообщений";
+            logger.severe(errMessage);
+            System.err.println(errMessage);
         }
     }
 }

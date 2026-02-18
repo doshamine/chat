@@ -12,7 +12,7 @@ public class Client {
     private static final String propertiesFilename = "conf.properties";
 
     public static void main(String[] args) {
-        String host  = getProperty("server.host");
+        String host = getProperty("server.host");
         int port = Integer.parseInt(getProperty("server.port"));
 
         Client client = new Client();
@@ -28,16 +28,19 @@ public class Client {
             handlerThread.join();
 
         } catch (IOException e) {
-            logger.severe("Соединение с сервером прервано: " + e.getMessage());
-            System.err.println("Соединение с сервером прервано");
+            String errMessage = "Соединение с сервером прервано: " + e.getMessage();
+            logger.severe(errMessage);
+            System.err.println(errMessage);
         } catch (InterruptedException e) {
-            logger.warning("Работа программы прервана: " + e.getMessage());
-            System.err.println("Работа программы прервана");
+            String errMessage = "Работа программы прервана: " + e.getMessage();
+            logger.severe(errMessage);
+            System.err.println(errMessage);
         }
     }
 
     public static String getProperty(String property) {
         Properties props = new Properties();
+
         try (InputStream is = Client.class.getClassLoader()
             .getResourceAsStream(propertiesFilename)) {
             if (is != null) {
@@ -46,6 +49,7 @@ public class Client {
         } catch (IOException e) {
             System.err.println(e.getMessage());
         }
+
         return props.getProperty(property);
     }
 }

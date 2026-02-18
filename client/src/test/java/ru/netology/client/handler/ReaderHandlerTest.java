@@ -13,32 +13,32 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 public class ReaderHandlerTest extends BaseTest {
     private final BlockingQueue<String> queue =  new LinkedBlockingQueue<>();
-    private final ByteArrayOutputStream output = new ByteArrayOutputStream();
+    private final ByteArrayOutputStream errContent = new ByteArrayOutputStream();
+    private final PrintStream err = System.out;
 
     @BeforeEach
-    public void setup() {
-        System.setErr(new PrintStream(output));
+    public void setUp() {
+        System.setErr(new PrintStream(errContent));
     }
 
     @AfterEach
-    public void setUp() {
+    public void tearDown() {
+        System.setErr(err);
         queue.clear();
     }
 
     @Test
     @DisplayName("Вывод сообщения об ошибке в случае некорректного таймаута сокета")
-    public void givenIncorrectTimeout_whenRun_thenLogSocketException() {
+    public void givenIncorrectTimeout_whenRun_thenReturn() {
         try (Socket socketMock = Mockito.mock(Socket.class)) {
             Mockito.doThrow(SocketException.class).when(socketMock).setSoTimeout(Mockito.anyInt());
-            ByteArrayInputStream inputMock = new ByteArrayInputStream("".getBytes());
-            Mockito.when(socketMock.getInputStream()).thenReturn(inputMock);
 
             Thread readerThread = new Thread(new ReaderHandler(socketMock, queue));
             readerThread.start();
             readerThread.join();
 
             Assertions.assertTrue(
-                output.toString().contains("таймаут"),
+                errContent.toString().contains("таймаут"),
                 "Сообщение должно содержать пояснение"
             );
         } catch (Exception e) {
@@ -48,7 +48,7 @@ public class ReaderHandlerTest extends BaseTest {
 
     @Test
     @DisplayName("Вывод сообщения об ошибке в случае закрытого потока ввода")
-    public void givenClosedInputStream_whenRun_thenLogInputError() {
+    public void givenClosedInputStream_whenRun_thenPrintError() {
         try (Socket socketMock = Mockito.mock(Socket.class)) {
             Mockito.when(socketMock.getInputStream()).thenThrow(IOException.class);
 
@@ -57,7 +57,7 @@ public class ReaderHandlerTest extends BaseTest {
             readerThread.join();
 
             Assertions.assertTrue(
-                output.toString().contains("поток"),
+                errContent.toString().contains("поток"),
                 "Сообщение должно содержать пояснение"
             );
         } catch (Exception e) {
@@ -88,7 +88,8 @@ public class ReaderHandlerTest extends BaseTest {
     @DisplayName("Ошибка в случае InterruptedException в очереди сообщений")
     public void givenInterruptedException_whenRun_thenLogError() {
         try (Socket socketMock = Mockito.mock(Socket.class)) {
-            ByteArrayInputStream inputMock = new ByteArrayInputStream("message".getBytes());
+            String message = "message";
+            ByteArrayInputStream inputMock = new ByteArrayInputStream(message.getBytes());
             Mockito.when(socketMock.getInputStream()).thenReturn(inputMock);
             BlockingQueue<String> queueSpy = Mockito.spy(queue);
             Mockito.doThrow(InterruptedException.class).when(queueSpy).put(Mockito.anyString());
@@ -98,7 +99,7 @@ public class ReaderHandlerTest extends BaseTest {
             readerThread.join();
 
             Assertions.assertTrue(
-                output.toString().contains("прервано"),
+                errContent.toString().contains("прервано"),
                 "Сообщение должно содержать пояснение"
             );
         } catch (Exception e) {

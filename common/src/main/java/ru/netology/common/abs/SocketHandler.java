@@ -2,10 +2,10 @@ package ru.netology.common.abs;
 
 import java.net.Socket;
 
-public abstract class Connector {
+public abstract class SocketHandler {
     protected final Socket socket;
 
-    protected Connector(Socket socket) {
+    protected SocketHandler(Socket socket) {
         this.socket = socket;
     }
 }

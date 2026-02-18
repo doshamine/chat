@@ -1,20 +1,18 @@
 package ru.netology.server.handler;
 
-import ru.netology.common.abs.Connector;
+import ru.netology.common.abs.SocketHandler;
 import ru.netology.common.abs.LoggableRunner;
 import ru.netology.common.message.Message;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
 import java.net.Socket;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
-public class ClientHandler extends Connector implements LoggableRunner {
+public class ClientHandler extends SocketHandler implements LoggableRunner {
     final Map<String, BlockingQueue<Message>> queuesMap;
+    final BlockingQueue<String> usernameQueue = new LinkedBlockingQueue<>();
 
     public ClientHandler(Socket socket, Map<String, BlockingQueue<Message>> queuesMap) {
         super(socket);
@@ -23,23 +21,10 @@ public class ClientHandler extends Connector implements LoggableRunner {
 
     @Override
     public void run() {
-        try (
-            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            PrintWriter out = new PrintWriter(socket.getOutputStream(), true)
-        ) {
-            out.println("Привет! Введи никнейм: ");
-            out.flush();
-            String username = in.readLine();
-
-            while (queuesMap.containsKey(username)) {
-                out.println("Никнейм уже занят! Введи другой: ");
-                out.flush();
-                username = in.readLine();
-            }
-
-            queuesMap.put(username, new LinkedBlockingQueue<>());
-            out.println("Добро пожаловать!");
-            out.flush();
+        try {
+            Thread registerThread = new Thread(new RegisterHandler(socket, queuesMap, usernameQueue));
+            registerThread.start();
+            String username = usernameQueue.take();
             logger.info(username + ": вход в чат");
 
             Thread writerThread = new Thread(new WriterHandler(socket, queuesMap.get(username)));
@@ -52,12 +37,18 @@ public class ClientHandler extends Connector implements LoggableRunner {
             readerThread.join();
             logger.info(username + ": выход из чата");
 
+            synchronized (socket) {
+                socket.notify();
+            }
             socket.close();
-            queuesMap.remove(username);
         } catch (IOException e) {
-            logger.severe("Ошибка работы потоков ввода/вывода: " + e.getMessage());
+            String errMessage = "Ошибка работы потоков ввода/вывода: " + e.getMessage();
+            logger.severe(errMessage);
+            System.err.println(errMessage);
         } catch (InterruptedException e) {
-            logger.warning("Прерывание работы чтения записи: " + e.getMessage());
+            String errMessage = "Прерывание работы чтения/записи: " + e.getMessage();
+            logger.warning(errMessage);
+            System.err.println(errMessage);
         }
     }
 }

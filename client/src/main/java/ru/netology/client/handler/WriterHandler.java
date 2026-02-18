@@ -1,7 +1,7 @@
 package ru.netology.client.handler;
 
 import ru.netology.client.Client;
-import ru.netology.common.abs.Connector;
+import ru.netology.common.abs.SocketHandler;
 import ru.netology.common.abs.LoggableRunner;
 
 import java.io.IOException;
@@ -9,7 +9,7 @@ import java.io.PrintWriter;
 import java.net.Socket;
 import java.util.Scanner;
 
-public class WriterHandler extends Connector implements LoggableRunner {
+public class WriterHandler extends SocketHandler implements LoggableRunner {
     public WriterHandler(Socket socket) {
         super(socket);
     }

@@ -1,6 +1,6 @@
 package ru.netology.server.handler;
 
-import ru.netology.common.abs.Connector;
+import ru.netology.common.abs.SocketHandler;
 import ru.netology.common.abs.LoggableRunner;
 import ru.netology.common.message.Message;
 import ru.netology.server.Server;
@@ -11,7 +11,7 @@ import java.net.Socket;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.BlockingQueue;
 
-public class WriterHandler extends Connector implements LoggableRunner {
+public class WriterHandler extends SocketHandler implements LoggableRunner {
     final BlockingQueue<Message> messageQueue;
 
     public WriterHandler(Socket socket, BlockingQueue<Message> messageQueue) {
@@ -42,9 +42,13 @@ public class WriterHandler extends Connector implements LoggableRunner {
             }
 
         } catch (IOException e) {
-            logger.severe("Ошибка открытия потока вывода");
+            String errMessage = "Ошибка открытия потока вывода";
+            logger.severe(errMessage);
+            System.err.println(errMessage);
         } catch (InterruptedException e) {
-            logger.severe("Прервана работа с очередью сообщений");
+            String errMessage = "Прервана работа с очередью сообщений";
+            logger.severe(errMessage);
+            System.err.println(errMessage);
         }
     }
 }

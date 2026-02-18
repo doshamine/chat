@@ -8,21 +8,31 @@ import java.io.*;
 import java.net.Socket;
 
 public class WriterHandlerTest extends BaseTest {
+    private final ByteArrayOutputStream errContent = new ByteArrayOutputStream();
+    private final PrintStream err = System.err;
+
+    @BeforeEach
+    public void setUp() {
+        System.setErr(new PrintStream(errContent));
+    }
+
+    @AfterEach
+    public void tearDown() {
+        System.setErr(err);
+    }
 
     @Test
     @DisplayName("Вывод сообщения об ошибке в случае закрытого потока вывода")
-    public void givenClosedOutputStream_whenRun_thenLogInputError() {
+    public void givenClosedOutputStream_whenRun_thenPrintError() {
         try (Socket socketMock = Mockito.mock(Socket.class)) {
             Mockito.when(socketMock.getOutputStream()).thenThrow(IOException.class);
-            ByteArrayOutputStream output = new ByteArrayOutputStream();
-            System.setErr(new PrintStream(output));
 
             Thread writerThread = new Thread(new WriterHandler(socketMock));
             writerThread.start();
             writerThread.join();
 
             Assertions.assertTrue(
-                output.toString().contains("поток"),
+                errContent.toString().contains("поток"),
                 "Сообщение должно содержать пояснение"
             );
         } catch (Exception e) {
@@ -34,19 +44,25 @@ public class WriterHandlerTest extends BaseTest {
     @DisplayName("Выход из чата по команде")
     public void givenExitCommand_whenRun_thenExit() {
         try (Socket socketMock = Mockito.mock(Socket.class)) {
-            ByteArrayOutputStream outputMock = new ByteArrayOutputStream();
-            Mockito.when(socketMock.getOutputStream()).thenReturn(outputMock);
+            Mockito.when(socketMock.getOutputStream()).thenReturn(new ByteArrayOutputStream());
+
             String exitCommand = BaseTest.getProperty("client.exit");
+            InputStream in = System.in;
             System.setIn(new ByteArrayInputStream(exitCommand.getBytes()));
-            ByteArrayOutputStream output = new ByteArrayOutputStream();
-            System.setOut(new PrintStream(output));
+
+            PrintStream out = System.out;
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            System.setOut(new PrintStream(outputStream));
 
             Thread writerThread = new Thread(new WriterHandler(socketMock));
             writerThread.start();
             writerThread.join();
 
+            System.setOut(out);
+            System.setIn(in);
+
             Assertions.assertTrue(
-                output.toString().contains("Выход"),
+                outputStream.toString().contains("Выход"),
                 "Должно быть уведомление о выходе"
             );
         } catch (Exception e) {
@@ -60,12 +76,16 @@ public class WriterHandlerTest extends BaseTest {
         try (Socket socketMock = Mockito.mock(Socket.class)) {
             ByteArrayOutputStream outputMock = new ByteArrayOutputStream();
             Mockito.when(socketMock.getOutputStream()).thenReturn(outputMock);
+
             String message = "message";
+            InputStream in = System.in;
             System.setIn(new ByteArrayInputStream(message.getBytes()));
 
             Thread writerThread = new Thread(new WriterHandler(socketMock));
             writerThread.start();
             writerThread.join();
+
+            System.setIn(in);
 
             Assertions.assertEquals(
                 message, outputMock.toString().trim(),

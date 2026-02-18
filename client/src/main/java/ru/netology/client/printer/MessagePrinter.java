@@ -24,9 +24,10 @@ public class MessagePrinter implements LoggableRunner {
                         System.out.println(messageQueue.take());
                     }
                 } catch (InterruptedException e) {
-                        logger.warning("Работа с очередью сообщений прервана: " + e.getMessage());
-                        System.err.println("Работа с очередью сообщений прервана");
-                        break;
+                    String errMessage = "Работа с очередью сообщений прервана: " + e.getMessage();
+                    logger.warning(errMessage);
+                    System.err.println(errMessage);
+                    break;
                 }
                 System.out.println("------");
             }

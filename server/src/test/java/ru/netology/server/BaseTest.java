@@ -1,6 +1,7 @@
-package ru.netology.client;
+package ru.netology.server;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Properties;
 
 public abstract class BaseTest {

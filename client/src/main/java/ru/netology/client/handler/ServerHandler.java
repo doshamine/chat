@@ -1,41 +1,31 @@
 package ru.netology.client.handler;
 
 import ru.netology.client.printer.MessagePrinter;
-import ru.netology.common.abs.Connector;
+import ru.netology.common.abs.SocketHandler;
 import ru.netology.common.abs.LoggableRunner;
 
 import java.net.Socket;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
-public class ServerHandler extends Connector implements LoggableRunner {
-    private final BlockingQueue<String> messageQueue = new LinkedBlockingQueue<>();
-    static final Object monitor = new Object();
-
-    private final RegistrationHandler registerHandler;
-    private final ReaderHandler readHandler;
-    private final WriterHandler writeHandler;
-    private final MessagePrinter messagePrinter;
-
+public class ServerHandler extends SocketHandler implements LoggableRunner {
     public ServerHandler(Socket socket) {
         super(socket);
-        registerHandler = new RegistrationHandler(socket);
-        readHandler = new ReaderHandler(socket, messageQueue);
-        writeHandler = new WriterHandler(socket);
-        messagePrinter = new MessagePrinter(messageQueue);
     }
 
     @Override
     public void run() {
+        final BlockingQueue<String> messageQueue = new LinkedBlockingQueue<>();
+
         try {
-            Thread registerThread = new Thread(registerHandler);
-            Thread readerThread = new Thread(readHandler);
-            Thread writerThread = new Thread(writeHandler);
-            Thread printerThread = new Thread(messagePrinter);
+            Thread registerThread = new Thread(new RegisterHandler(socket));
+            Thread readerThread = new Thread(new ReaderHandler(socket, messageQueue));
+            Thread writerThread = new Thread(new WriterHandler(socket));
+            Thread printerThread = new Thread(new MessagePrinter(messageQueue));
 
             registerThread.start();
-            synchronized (monitor) {
-                monitor.wait();
+            synchronized (socket) {
+                socket.wait();
             }
 
             readerThread.start();
@@ -47,8 +37,8 @@ public class ServerHandler extends Connector implements LoggableRunner {
             printerThread.interrupt();
             readerThread.interrupt();
 
-            synchronized (monitor) {
-                monitor.notify();
+            synchronized (socket) {
+                socket.notify();
             }
         } catch (InterruptedException e) {
             logger.warning("Работа с сообщениями прервана: " + e.getMessage());
