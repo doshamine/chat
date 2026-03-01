@@ -18,3 +18,10 @@
 - После ввода имени производится подключение к указанному в настройках серверу;
 - Для выхода из чата нужно набрать команду выхода - “/exit”;
 - Все основные события в приложении логируются в файл.
+
+## Запуск проекта
+
+- Проверьте параметры сервера в файле [conf.properties](https://github.com/doshamine/chat/blob/master/server/src/main/resources/conf.properties);
+- Запустите класс [Server](https://github.com/doshamine/chat/blob/master/server/src/main/java/ru/netology/server/Server.java);
+- Проверьте настройки клиента в файле [conf.properties](https://github.com/doshamine/chat/blob/master/client/src/main/resources/conf.properties);
+- Запустите класс [Client](https://github.com/doshamine/chat/blob/master/client/src/main/java/ru/netology/client/Client.java).
